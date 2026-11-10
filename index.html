@@ -1,0 +1,204 @@
+<!DOCTYPE html>
+<html lang="ru">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>КТ челюстей 08.03.2026</title>
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link href="https://fonts.googleapis.com/css2?family=IBM+Plex+Sans:wght@400;500;600&family=IBM+Plex+Mono:wght@400;500&display=swap" rel="stylesheet">
+<style>
+:root{
+  /* Single dark theme, like a radiology workstation: the image is the brightest thing on screen.
+     Layout: big viewport on top, compact control strip below; side panel on wide screens. */
+  --bg:#0d1013; --panel:#161b20; --line:#273039; --text:#dfe6ec; --muted:#8a97a3; --accent:#5fb3c9;
+  --font-body:"IBM Plex Sans",system-ui,-apple-system,"Segoe UI",sans-serif;
+  --font-mono:"IBM Plex Mono",ui-monospace,Menlo,Consolas,monospace;
+  color-scheme:dark;
+}
+*{box-sizing:border-box}
+html,body{height:100%;margin:0}
+body{background:var(--bg);color:var(--text);font:15px/1.45 var(--font-body);display:flex;flex-direction:column}
+header{display:flex;flex-wrap:wrap;align-items:baseline;gap:4px 14px;padding:12px 16px 8px}
+h1{font-size:17px;font-weight:600;margin:0;text-wrap:balance}
+.sub{color:var(--muted);font-size:13px;font-family:var(--font-mono)}
+main{flex:1;display:grid;grid-template-columns:1fr;gap:12px;padding:0 16px 16px;min-height:0}
+@media (min-width:900px){main{grid-template-columns:1fr 320px}}
+.stage{position:relative;background:#000;border:1px solid var(--line);border-radius:8px;min-height:300px;display:flex;align-items:center;justify-content:center;overflow:hidden;touch-action:none}
+canvas#view{display:block;cursor:crosshair}
+@media (max-width:899px){html,body{height:auto}main{display:flex;flex-direction:column}.stage{aspect-ratio:1/1;max-height:72vh;min-height:0;width:100%}}
+.hud{position:absolute;left:10px;top:8px;font:12px var(--font-mono);color:#b8c4ce;pointer-events:none;text-shadow:0 1px 2px #000}
+.hud-r{left:auto;right:10px}
+.orient{position:absolute;font:600 12px var(--font-mono);color:var(--accent);pointer-events:none}
+.side{display:flex;flex-direction:column;gap:14px;background:var(--panel);border:1px solid var(--line);border-radius:8px;padding:14px}
+.group{display:flex;flex-direction:column;gap:8px}
+.label{font-size:12px;color:var(--muted);text-transform:uppercase;letter-spacing:.06em;display:flex;justify-content:space-between}
+.label b{font:500 12px var(--font-mono);color:var(--text);text-transform:none;letter-spacing:0}
+.chips{display:flex;flex-wrap:wrap;gap:6px}
+.chip{appearance:none;border:1px solid var(--line);background:transparent;color:var(--text);font:500 14px var(--font-body);padding:7px 12px;border-radius:999px;cursor:pointer}
+.chip[aria-pressed="true"]{background:var(--accent);border-color:var(--accent);color:#06161b}
+.chip:focus-visible,input[type=range]:focus-visible{outline:2px solid var(--accent);outline-offset:2px}
+input[type=range]{width:100%;accent-color:var(--accent);height:28px}
+.note{font-size:12.5px;color:var(--muted);line-height:1.5}
+.load{position:absolute;inset:0;display:flex;flex-direction:column;align-items:center;justify-content:center;gap:10px;background:#000;color:var(--muted);font-size:14px}
+.bar{width:220px;height:6px;background:var(--line);border-radius:3px;overflow:hidden}
+.bar i{display:block;height:100%;width:0;background:var(--accent);transition:width .2s}
+@media (prefers-reduced-motion:reduce){.bar i{transition:none}}
+.stepper{display:flex;gap:6px;align-items:center}
+.stepper button{appearance:none;width:36px;height:32px;border-radius:6px;border:1px solid var(--line);background:transparent;color:var(--text);font:500 16px var(--font-mono);cursor:pointer;flex:none}
+</style>
+</head>
+<body>
+<header>
+  <h1>КТ челюстей (КЛКТ)</h1>
+  <span class="sub">Sirona GALILEOS · 08.03.2026 · шаг 0,32 мм</span>
+</header>
+<main>
+  <div class="stage" id="stage">
+    <canvas id="view" width="352" height="352" aria-label="Срез снимка"></canvas>
+    <div class="hud" id="hud"></div>
+    <div class="hud hud-r" id="hudr"></div>
+    <div class="load" id="load"><div>Загружаю снимок (≈18 МБ)…</div><div class="bar"><i id="prog"></i></div></div>
+  </div>
+  <aside class="side">
+    <div class="group">
+      <div class="label">Вид</div>
+      <div class="chips" id="views">
+        <button class="chip" data-v="ax" aria-pressed="true">Сверху</button>
+        <button class="chip" data-v="co" aria-pressed="false">Спереди</button>
+        <button class="chip" data-v="sa" aria-pressed="false">Сбоку</button>
+      </div>
+    </div>
+    <div class="group">
+      <div class="label"><span>Положение среза</span><b id="posv"></b></div>
+      <div class="stepper">
+        <button id="minus" aria-label="Предыдущий срез">−</button>
+        <input type="range" id="pos" min="0" max="319" value="160" aria-label="Положение среза">
+        <button id="plus" aria-label="Следующий срез">+</button>
+      </div>
+    </div>
+    <div class="group">
+      <div class="label"><span>Толщина слоя</span><b id="thv"></b></div>
+      <input type="range" id="th" min="1" max="352" value="1" aria-label="Толщина слоя">
+      <div class="chips">
+        <button class="chip" id="thin" aria-pressed="false">Тонкий срез</button>
+        <button class="chip" id="xray" aria-pressed="false">Как рентген</button>
+      </div>
+    </div>
+    <div class="group">
+      <div class="label">Что подсветить</div>
+      <div class="chips" id="presets">
+        <button class="chip" data-c="130" data-w="150" aria-pressed="true">Кость и зубы</button>
+        <button class="chip" data-c="210" data-w="80" aria-pressed="false">Пломбы и коронки</button>
+        <button class="chip" data-c="70" data-w="120" aria-pressed="false">Мягкие ткани</button>
+      </div>
+      <div class="label"><span>Яркость</span></div>
+      <input type="range" id="wc" min="20" max="240" value="130" aria-label="Яркость">
+      <div class="label"><span>Контраст</span></div>
+      <input type="range" id="ww" min="20" max="255" value="150" aria-label="Контраст">
+    </div>
+    <p class="note">Нажмите на снимок, чтобы перенести туда перекрестие: другие виды откроются через эту точку. Колесо мыши листает срезы.</p>
+    <p class="note">Снимок уменьшен вдвое для быстрой загрузки. Для просмотра, не для диагностики. Лево и право на снимке не подтверждены клиникой.</p>
+  </aside>
+</main>
+<script>
+(async()=>{
+const $=s=>document.querySelector(s);
+const cv=$('#view'),ctx=cv.getContext('2d');
+let meta,V,NX,NY,NZ;
+const st={view:'ax',x:176,y:110,z:200,th:1,c:130,w:150,lastTh:1};
+try{
+  meta=await (await fetch('data/meta.json')).json();
+  NX=meta.nx;NY=meta.ny;NZ=meta.nz;
+  V=new Uint8Array(NX*NY*NZ);
+  const tmp=document.createElement('canvas'),tc=tmp.getContext('2d',{willReadFrequently:true});
+  for(let a=0;a<meta.atlases;a++){
+    const bm=new Image();bm.src='data/vol'+a+'.png';await bm.decode();
+    tmp.width=bm.width;tmp.height=bm.height;tc.drawImage(bm,0,0);
+    const d=tc.getImageData(0,0,bm.width,bm.height).data,AW=bm.width;
+    for(let k=0;k<meta.per;k++){
+      const z=a*meta.per+k,r=Math.floor(k/meta.cols),c=k%meta.cols,base=z*NY*NX;
+      for(let y=0;y<NY;y++){let s=((r*NY+y)*AW+c*NX)*4,t=base+y*NX;for(let x=0;x<NX;x++,s+=4)V[t+x]=d[s];}
+    }
+    $('#prog').style.width=((a+1)/meta.atlases*100)+'%';
+  }
+  $('#prog').style.width='100%';
+  $('#load').remove();
+}catch(e){
+  $('#load').innerHTML='<div>Не удалось загрузить снимок. Обновите страницу или откройте её в другом браузере.</div>';
+  return;
+}
+st.x=NX>>1;st.y=Math.round(NY*0.2);st.z=Math.round(NZ*0.62);
+const lut=new Uint8ClampedArray(256);
+function mkLut(){const lo=st.c-st.w/2;for(let i=0;i<256;i++)lut[i]=Math.max(0,Math.min(255,(i-lo)/st.w*255));}
+const idx=(z,y,x)=>(z*NY+y)*NX+x;
+function dims(){return st.view==='ax'?[NX,NY,NZ]:st.view==='co'?[NX,NZ,NY]:[NY,NZ,NX];}
+function cur(){return st.view==='ax'?st.z:st.view==='co'?st.y:st.x;}
+function setCur(v){const n=dims()[2];v=Math.max(0,Math.min(n-1,v));if(st.view==='ax')st.z=v;else if(st.view==='co')st.y=v;else st.x=v;}
+function render(){
+  mkLut();
+  const [W,H,D]=dims();
+  if(cv.width!==W||cv.height!==H){cv.width=W;cv.height=H;}
+  const img=ctx.createImageData(W,H),p=img.data,buf=new Uint8Array(W*H);
+  const c=cur(),half=(st.th-1)>>1;
+  const a=Math.max(0,c-half),b=Math.min(D-1,c+(st.th-1-half));
+  if(st.view==='ax'){
+    for(let z=a;z<=b;z++){const o=z*NY*NX;for(let i=0;i<W*H;i++){const v=V[o+i];if(v>buf[i])buf[i]=v;}}
+  }else if(st.view==='co'){
+    for(let z=0;z<NZ;z++)for(let y=a;y<=b;y++){const o=idx(z,y,0),r=z*W;for(let x=0;x<NX;x++){const v=V[o+x];if(v>buf[r+x])buf[r+x]=v;}}
+  }else{
+    for(let z=0;z<NZ;z++)for(let y=0;y<NY;y++){const o=idx(z,y,0),r=z*W+y;let m=buf[r];for(let x=a;x<=b;x++){const v=V[o+x];if(v>m)m=v;}buf[r]=m;}
+  }
+  for(let i=0,j=0;i<W*H;i++,j+=4){const g=lut[buf[i]];p[j]=p[j+1]=p[j+2]=g;p[j+3]=255;}
+  ctx.putImageData(img,0,0);
+  fit();
+  // crosshair
+  ctx.strokeStyle='rgba(95,179,201,.55)';ctx.lineWidth=1;ctx.setLineDash([4,4]);
+  let cx,cy;
+  if(st.view==='ax'){cx=st.x;cy=st.y}else if(st.view==='co'){cx=st.x;cy=st.z}else{cx=st.y;cy=st.z}
+  ctx.beginPath();ctx.moveTo(cx+.5,0);ctx.lineTo(cx+.5,H);ctx.moveTo(0,cy+.5);ctx.lineTo(W,cy+.5);ctx.stroke();ctx.setLineDash([]);
+  // labels
+  const names={ax:'Вид сверху · спереди лицо',co:'Вид спереди',sa:'Вид сбоку · лицо слева'};
+  $('#hud').textContent=names[st.view];
+  const mm=(c*meta.mm).toFixed(1);
+  $('#hudr').textContent=(st.th>1?('слой '+(st.th*meta.mm).toFixed(1)+' мм'):'тонкий срез');
+  $('#posv').textContent=(c+1)+' / '+D+' · '+mm+' мм';
+  $('#thv').textContent=(st.th*meta.mm).toFixed(1)+' мм';
+  const pos=$('#pos');pos.max=D-1;pos.value=c;
+  const th=$('#th');th.max=D;th.value=st.th;
+  $('#thin').setAttribute('aria-pressed',st.th===1);
+  $('#xray').setAttribute('aria-pressed',st.th>=D);
+}
+function fit(){const r=$('#stage').getBoundingClientRect();const k=Math.min((r.width-2)/cv.width,(r.height-2)/cv.height);cv.style.width=Math.floor(cv.width*k)+'px';cv.style.height=Math.floor(cv.height*k)+'px';}
+window.addEventListener('resize',fit);
+let raf=0;const draw=()=>{if(!raf)raf=requestAnimationFrame(()=>{raf=0;render();});};
+document.querySelectorAll('#views .chip').forEach(b=>b.onclick=()=>{
+  st.view=b.dataset.v;document.querySelectorAll('#views .chip').forEach(o=>o.setAttribute('aria-pressed',o===b));
+  st.th=Math.min(st.th,dims()[2]);draw();});
+$('#pos').oninput=e=>{setCur(+e.target.value);draw();};
+$('#minus').onclick=()=>{setCur(cur()-1);draw();};
+$('#plus').onclick=()=>{setCur(cur()+1);draw();};
+$('#th').oninput=e=>{st.th=+e.target.value;draw();};
+$('#thin').onclick=()=>{st.th=1;draw();};
+$('#xray').onclick=()=>{st.th=dims()[2];draw();};
+document.querySelectorAll('#presets .chip').forEach(b=>b.onclick=()=>{
+  st.c=+b.dataset.c;st.w=+b.dataset.w;$('#wc').value=st.c;$('#ww').value=st.w;
+  document.querySelectorAll('#presets .chip').forEach(o=>o.setAttribute('aria-pressed',o===b));draw();});
+const clearPreset=()=>document.querySelectorAll('#presets .chip').forEach(o=>o.setAttribute('aria-pressed','false'));
+$('#wc').oninput=e=>{st.c=+e.target.value;clearPreset();draw();};
+$('#ww').oninput=e=>{st.w=+e.target.value;clearPreset();draw();};
+function pick(ev){
+  const r=cv.getBoundingClientRect();
+  const u=Math.round((ev.clientX-r.left)/r.width*cv.width),v=Math.round((ev.clientY-r.top)/r.height*cv.height);
+  if(u<0||v<0||u>=cv.width||v>=cv.height)return;
+  if(st.view==='ax'){st.x=u;st.y=v}else if(st.view==='co'){st.x=u;st.z=v}else{st.y=u;st.z=v}
+  draw();
+}
+cv.addEventListener('pointerdown',e=>{pick(e);cv.setPointerCapture(e.pointerId);});
+cv.addEventListener('pointermove',e=>{if(e.buttons)pick(e);});
+$('#stage').addEventListener('wheel',e=>{e.preventDefault();setCur(cur()+(e.deltaY>0?1:-1));draw();},{passive:false});
+window.addEventListener('keydown',e=>{if(e.key==='ArrowUp'||e.key==='PageUp'){setCur(cur()+1);draw();}else if(e.key==='ArrowDown'||e.key==='PageDown'){setCur(cur()-1);draw();}});
+render();
+})();
+</script>
+</body>
+</html>
